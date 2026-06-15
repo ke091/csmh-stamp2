@@ -1,22 +1,298 @@
-// 중복 검사 로직
-const dup = list.find(x =>
-  x.name === currentStudent.name &&
-  x.classId === currentStudent.classId &&
-  x.status !== "rejected"
-);
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>충남반도체고 축제 스탬프 투어 (현장 인증 버전)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght=400;600;700;900&display=swap');
 
-if (dup) {
-  toast(dup.status === "approved" ? "이미 방문 완료한 부스입니다! ✅" : "이미 대기 중인 요청입니다 ⏳");
-  btn.disabled = false;     // ◀ 중복일 때는 버튼이 정상적으로 다시 켜짐
-  btn.textContent = "체크인 요청 보내기";
-} else {
-  // ... 새로운 요청 파이어베이스 전송 ...
-  set(newRef, { ... }).then(() => { ... }).catch(() => { ... })
-  .finally(() => {
-    setTimeout(() => {
-      btn.disabled = false; // ◀ 새로 전송할 때는 이 finally 블록이 실행되어야 함
-      btn.textContent = "체크인 요청 보내기";
-      refreshStamps();
-    }, 600);
+  :root {
+    --bg: #F8F9FA;
+    --card: #FFFFFF;
+    --text: #1A1D20;
+    --muted: #868E96;
+    --line: #E9ECEF;
+
+    --primary: #4C6EF5;
+    --primary-light: #EDF2FF;
+    --stamp: #FF6B6B;
+    --stamp-light: #FFF0F6;
+    --success: #2F9E44;
+    --success-light: #E6FCF5;
+    --empty: #F1F3F5;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Pretendard', sans-serif; letter-spacing: -0.02em; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
+
+  .header { padding: 30px 20px 20px; text-align: center; }
+  .header .school { font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .header h1 { font-size: 22px; font-weight: 900; color: var(--text); }
+
+  .container { max-width: 480px; margin: 0 auto; padding: 0 16px; }
+
+  .card { background: var(--card); border-radius: 20px; padding: 24px; margin-bottom: 16px; border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+  .card-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+
+  label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  input[type=text], input[type=password], select { width: 100%; font-size: 15px; font-weight: 600; padding: 14px 16px; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; color: var(--text); margin-bottom: 16px; transition: all 0.2s; appearance: none; }
+  input:focus, select:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+  .sel-wrap { position: relative; }
+  .sel-wrap::after { content: "▾"; position: absolute; right: 16px; top: 16px; color: var(--muted); pointer-events: none; font-size: 14px; }
+
+  .btn { width: 100%; font-size: 15px; font-weight: 700; padding: 15px; border: none; border-radius: 14px; cursor: pointer; transition: all 0.2s; text-align: center; display: block; }
+  .btn:active { transform: scale(0.98); opacity: 0.9; }
+  .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(76,110,245,0.25); }
+  .btn-danger { background: #FA5252; color: white; }
+
+  .stamp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 8px 0 16px; }
+  .stamp-cell { aspect-ratio: 1; border-radius: 18px; background: var(--empty); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; position: relative; border: 1.5px solid transparent; transition: all 0.2s; }
+  .stamp-cell .cell-name { font-size: 14px; font-weight: 700; color: #495057; }
+
+  .stamp-cell.done { background: var(--stamp-light); color: var(--stamp); border-color: #FFA8A8; transform: rotate(-3deg); animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  .stamp-cell.done .cell-name { color: var(--stamp); }
+  .stamp-cell.done::after { content: "✓"; position: absolute; font-size: 36px; font-weight: 900; color: var(--stamp); opacity: 0.12; }
+  @keyframes pop { 0% { transform: scale(0.6) rotate(0deg); opacity: 0; } 100% { transform: scale(1) rotate(-3deg); opacity: 1; } }
+
+  .stamp-status { text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+  .stamp-status strong { color: var(--stamp); font-size: 16px; font-weight: 700; }
+
+  .info-text { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 12px; text-align: center; }
+  .divider { height: 1px; background: var(--line); margin: 16px 0; }
+
+  .congratulations { background: linear-gradient(135deg, #FFF9DB, #FFF0F6); border: 1px solid #FFDEEB; text-align: center; padding: 20px; border-radius: 20px; margin-bottom: 16px; color: #C2255C; }
+
+  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(40px); background: rgba(33,37,41,0.9); backdrop-filter: blur(4px); color: white; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 99px; transition: all 0.3s ease; z-index: 2000; opacity: 0; pointer-events: none; }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="school">Chungnam Semiconductor High School</div>
+  <h1>축제 스탬프 투어</h1>
+</div>
+
+<div class="container">
+
+  <div id="panel-login">
+    <div class="card">
+      <div class="card-title">반과 이름을 입력해 주세요</div>
+      <label>우리 반 선택</label>
+      <div class="sel-wrap">
+        <select id="select-st-class"></select>
+      </div>
+      <label>이름</label>
+      <input type="text" id="input-st-name" placeholder="예) 김민준" maxlength="10" autocomplete="off">
+      <button class="btn btn-primary" id="btn-login">시작하기</button>
+    </div>
+  </div>
+
+  <div id="panel-main" style="display:none">
+    <div class="congratulations" id="banner-all-done" style="display:none">
+      <div style="font-size:18px; font-weight:900;">🎉 모든 부스 완주 성공!</div>
+      <p style="font-size:13px; font-weight:600; margin-top:2px;">축하합니다! 모든 도장을 모았습니다.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title" id="text-st-user">내 스탬프 투어</div>
+      <div class="stamp-grid" id="area-stamp-grid"></div>
+      <div class="stamp-status"><strong id="text-stamp-count">0</strong> / 9 완료</div>
+    </div>
+
+    <div class="card" style="border: 1.5px solid #FFE066; background: #FFF9DB; background-image: radial-gradient(#F59F00 0.5px, transparent 0.5px); background-size: 10px 10px; background-opacity: 0.1;">
+      <div class="card-title" style="color: #8F6B00;">🎯 스탬프 도장 찍기 (운영자 전용)</div>
+      <p style="font-size: 12px; color: #8F6B00; font-weight: 600; margin-bottom: 12px; line-height: 1.4;">
+        체험을 완료했다면 부스 관리자에게 핸드폰을 보여주세요!
+      </p>
+      
+      <label style="color: #8F6B00;">현재 방문한 부스</label>
+      <div class="sel-wrap">
+        <select id="select-booth-target" style="border-color: #FFE066; font-weight: 700;"></select>
+      </div>
+      
+      <label style="color: #8F6B00;">부스 비밀번호 입력</label>
+      <input type="password" id="input-booth-pw" placeholder="••••" autocomplete="off" inputmode="numeric" style="border-color: #FFE066; letter-spacing: 4px; text-align: center; font-size: 18px;">
+      
+      <button class="btn" id="btn-stamp-submit" style="background: #F59F00; color: white; font-weight: 700; box-shadow: 0 4px 12px rgba(245,159,0,0.2);">스탬프 도장 찍기</button>
+    </div>
+
+    <div class="divider"></div>
+    <span style="display:block; text-align:center; font-size:12px; color:var(--muted); cursor:pointer; padding:10px;" id="btn-reset-session">← 다른 이름으로 변경 (학생 정보 초기화)</span>
+  </div>
+
+</div>
+
+<div class="toast" id="element-toast"></div>
+
+<script>
+  // 각 반(부스)별 비밀번호 리스트 설정
+  const CLASSES = [
+    { id:"c11", label:"1학년 1반", short:"1-1", pw:"1101" },
+    { id:"c12", label:"1학년 2반", short:"1-2", pw:"1102" },
+    { id:"c13", label:"1학년 3반", short:"1-3", pw:"1103" },
+    { id:"c21", label:"2학년 1반", short:"2-1", pw:"2101" },
+    { id:"c22", label:"2학년 2반", short:"2-2", pw:"2102" },
+    { id:"c23", label:"2학년 3반", short:"2-3", pw:"2103" },
+    { id:"c3e", label:"3학년 전기과", short:"3·전기", pw:"3301" },
+    { id:"c3t", label:"3학년 통신과", short:"3·통신", pw:"3302" },
+    { id:"c3j", label:"3학년 전자과", short:"3·전자", pw:"3303" }
+  ];
+
+  let currentStudent = null;
+  let myStamps = []; // 이미 획득한 부스 ID 배열
+
+  // --- 토스트 기능 ---
+  let toastTimer;
+  function toast(msg) {
+    const t = document.getElementById("element-toast");
+    if(t) {
+      t.textContent = msg;
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+    }
+  }
+
+  // --- 초기 로드 및 드롭다운 생성 ---
+  document.addEventListener("DOMContentLoaded", () => {
+    const stClassSel = document.getElementById("select-st-class");
+    const boothTargetSel = document.getElementById("select-booth-target");
+
+    CLASSES.forEach(c => {
+      stClassSel.insertAdjacentHTML("beforeend", `<option value="${c.id}">${c.label}</option>`);
+      boothTargetSel.insertAdjacentHTML("beforeend", `<option value="${c.id}">${c.label} 부스</option>`);
+    });
+
+    // 기존 로그인 기록 확인
+    const savedSession = localStorage.getItem("local_student_info");
+    if (savedSession) {
+      currentStudent = JSON.parse(savedSession);
+      loadStamps();
+      showMainPanel();
+    }
   });
-}
+
+  // --- 로그인 버튼 액션 ---
+  document.getElementById("btn-login").addEventListener("click", () => {
+    const name = document.getElementById("input-st-name").value.trim();
+    const classId = document.getElementById("select-st-class").value;
+    
+    if (!name) {
+      toast("이름을 입력해 주세요.");
+      return;
+    }
+
+    currentStudent = { name, classId };
+    localStorage.setItem("local_student_info", JSON.stringify(currentStudent));
+    
+    loadStamps();
+    showMainPanel();
+    toast(`${name}님, 스탬프 투어를 시작합니다! 🎈`);
+  });
+
+  // --- 세션 전환 애니메이션/화면 처리 ---
+  function showMainPanel() {
+    const targetClass = CLASSES.find(c => c.id === currentStudent.classId);
+    document.getElementById("text-st-user").textContent = `${targetClass ? targetClass.short : ""} ${currentStudent.name}님의 카드`;
+    document.getElementById("panel-login").style.display = "none";
+    document.getElementById("panel-main").style.display = "block";
+    renderStampGrid();
+  }
+
+  // --- 도장 데이터 로드 ---
+  function loadStamps() {
+    if (!currentStudent) return;
+    // 학생 개개인 별 유일 키값 생성 (반_이름)
+    const storageKey = `stamps_${currentStudent.classId}_${currentStudent.name}`;
+    const savedStamps = localStorage.getItem(storageKey);
+    myStamps = savedStamps ? JSON.parse(savedStamps) : [];
+  }
+
+  // --- 도장 데이터 저장 ---
+  function saveStamps() {
+    if (!currentStudent) return;
+    const storageKey = `stamps_${currentStudent.classId}_${currentStudent.name}`;
+    localStorage.setItem(storageKey, JSON.stringify(myStamps));
+    renderStampGrid();
+  }
+
+  // --- 화면에 도장 격자판 그리기 ---
+  function renderStampGrid() {
+    const grid = document.getElementById("area-stamp-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    let doneCount = 0;
+
+    CLASSES.forEach(c => {
+      const isDone = myStamps.includes(c.id);
+      let stateClass = "";
+      let extraText = "";
+
+      if (isDone) {
+        stateClass = "done";
+        extraText = "<div>완료</div>";
+        doneCount++;
+      }
+
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="stamp-cell ${stateClass}">
+          <span class="cell-name">${c.short}</span>
+          ${extraText}
+        </div>
+      `);
+    });
+
+    document.getElementById("text-stamp-count").textContent = doneCount;
+    document.getElementById("banner-all-done").style.display = (doneCount === CLASSES.length) ? "block" : "none";
+  }
+
+  // --- 현장 비밀번호 입력 인증 액션 ---
+  document.getElementById("btn-stamp-submit").addEventListener("click", () => {
+    const targetBoothId = document.getElementById("select-booth-target").value;
+    const inputPw = document.getElementById("input-booth-pw").value.trim();
+    
+    // 대상 부스 정보 조회
+    const targetBooth = CLASSES.find(c => c.id === targetBoothId);
+    
+    if (!targetBooth) return;
+
+    // 1. 이미 찍은 도장인지 검증
+    if (myStamps.includes(targetBoothId)) {
+      toast("이미 도장이 찍힌 부스입니다! ✅");
+      document.getElementById("input-booth-pw").value = "";
+      return;
+    }
+
+    // 2. 비밀번호 체크
+    if (inputPw === targetBooth.pw) {
+      myStamps.push(targetBoothId);
+      saveStamps();
+      toast(`${targetBooth.label} 도장 획득 성공! 🎯`);
+      
+      // 입력창 비우기
+      document.getElementById("input-booth-pw").value = "";
+    } else {
+      toast("❌ 비밀번호가 올바르지 않습니다.");
+      document.getElementById("input-booth-pw").value = "";
+    }
+  });
+
+  // --- 정보 리셋 (학생 계정 로그아웃 개념) ---
+  document.getElementById("btn-reset-session").addEventListener("click", () => {
+    if(confirm("학생 정보를 변경하시겠습니까? (기존 도장은 이 이름으로 다시 로그인하면 유지됩니다)")) {
+      localStorage.removeItem("local_student_info");
+      currentStudent = null;
+      myStamps = [];
+      document.getElementById("input-st-name").value = "";
+      document.getElementById("input-booth-pw").value = "";
+      document.getElementById("panel-login").style.display = "block";
+      document.getElementById("panel-main").style.display = "none";
+    }
+  });
+</script>
+</body>
+</html>
